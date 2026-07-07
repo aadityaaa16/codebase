@@ -17,7 +17,11 @@ Run with:
 import streamlit as st
 import requests
 
+import os as _os
 API_BASE = "http://localhost:8000"
+_DEFAULT_SAMPLE_REPO = _os.path.abspath(
+    _os.path.join(_os.path.dirname(__file__), "..", "sample_repo")
+)
 
 st.set_page_config(
     page_title="Codebase Navigator",
@@ -273,7 +277,7 @@ with st.sidebar:
     st.markdown("### Repository")
     repo_path = st.text_input(
         "Path to index",
-        value="/home/claude/codebase-navigator/sample_repo",
+        value=_DEFAULT_SAMPLE_REPO,
         label_visibility="collapsed",
     )
     if st.button("Index Repository", use_container_width=True):
@@ -367,8 +371,15 @@ for item in st.session_state.history:
     if item["sources"]:
         st.markdown('<div class="sources-label">Source files</div>', unsafe_allow_html=True)
         for src in item["sources"]:
-            filename = src["file_path"].split("/")[-1]
-            folder = "/".join(src["file_path"].split("/")[:-1]).split("sample_repo")[-1].lstrip("/")
+            full_path = src["file_path"].replace("\\", "/")  # normalize Windows backslashes for display
+            filename = _os.path.basename(full_path)
+            folder = _os.path.dirname(full_path)
+            # Show path relative to the indexed repo root, not the full absolute path,
+            # by trimming everything up through the last folder that matches the
+            # indexed repo's own folder name (works for any repo, not just sample_repo)
+            repo_root_name = _os.path.basename(_os.path.normpath(repo_path)) if 'repo_path' in dir() else None
+            if repo_root_name and repo_root_name in folder:
+                folder = folder.split(repo_root_name, 1)[-1].lstrip("/")
             relevance_pct = min(100, max(5, int(src["hybrid_score"] * 100)))
             parent = f"{src.get('chunk_type', '')}"
             st.markdown(f"""

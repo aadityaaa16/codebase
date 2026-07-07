@@ -16,6 +16,7 @@ import chromadb
 from typing import List
 import sys
 import os
+from pathlib import Path
 
 sys.path.append(os.path.dirname(__file__))
 from chunker import CodeChunk
@@ -25,13 +26,22 @@ _collection = None
 
 COLLECTION_NAME = "code_chunks"
 
+# IMPORTANT: this lives OUTSIDE the project folder (in the user's home
+# directory), not inside it. If ChromaDB wrote its files inside the
+# project directory, `uvicorn --reload` would detect those new/changed
+# files as source code changes and restart the server mid-request -
+# which produces exactly the "empty response body" bug this was fixed
+# to avoid.
+_DATA_DIR = Path.home() / ".codebase_navigator" / "chroma_db"
+
 
 def _get_collection():
     global _client, _collection
     if _client is None:
         # Persistent client so the index survives between runs -
         # you don't want to re-embed the whole repo every time you ask a question
-        _client = chromadb.PersistentClient(path=os.path.join(os.path.dirname(__file__), "..", "chroma_db"))
+        _DATA_DIR.mkdir(parents=True, exist_ok=True)
+        _client = chromadb.PersistentClient(path=str(_DATA_DIR))
     if _collection is None:
         _collection = _client.get_or_create_collection(name=COLLECTION_NAME)
     return _collection
