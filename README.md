@@ -78,11 +78,13 @@ pip install -r requirements.txt
 
 ### 2. Choose your mode
 
-**Free, fully local (default):** no setup needed. Uses a local
-`sentence-transformers` model for embeddings and template-based explanations.
+**Free, fully local mock (default):** no setup needed. Uses a lightweight
+TF-IDF stand-in for embeddings and template-based explanations - good for
+verifying the pipeline works, not for real use.
 
-**Free, better quality (recommended):** get a free Gemini API key at
-https://aistudio.google.com/apikey, then:
+**Free, real quality (recommended):** get a free Gemini API key at
+https://aistudio.google.com/apikey. This single key powers both the
+embeddings and the explanations - no PyTorch or local model download needed:
 ```bash
 export EMBEDDING_MODE=real
 export EXPLAIN_MODE=real
@@ -123,5 +125,5 @@ sample_repo/   # small test repo mirroring common auth/login patterns
 
 ## Tech stack
 
-FastAPI · Streamlit · ChromaDB · sentence-transformers · BM25 (`rank_bm25`) ·
-Google Gemini · Python `ast` module
+FastAPI · Streamlit · ChromaDB · Google Gemini (embeddings + explanations) ·
+BM25 (`rank_bm25`) · Python `ast` module

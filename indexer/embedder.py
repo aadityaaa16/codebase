@@ -1,45 +1,62 @@
 """
 embedder.py
 
-PRODUCTION embedder. Run this on your own machine (not in a network-
-restricted sandbox), since it downloads a small model from Hugging Face
-the first time it runs (~80MB, cached afterward).
+PRODUCTION embedder - uses Gemini's embedding API (gemini-embedding-001)
+instead of a local sentence-transformers model.
 
-Uses `sentence-transformers` with `all-MiniLM-L6-v2`:
-- Free, no API key required
-- Runs entirely on CPU, fine for an 8GB RAM laptop
-- Produces a 384-dimensional vector per chunk of text
+Why this version: it uses the SAME free Gemini API key you already have
+for the explanation layer, avoids installing PyTorch (a large, heavy
+dependency), and keeps the whole project's install lightweight.
 
-Any module in this project that needs embeddings should import
-`embed()` from here (or from embedder_mock.py during sandbox testing)
-so the rest of the code never has to know which one is in use.
+Trade-off vs. the local sentence-transformers approach: this requires
+an internet connection and an API key, and is subject to Gemini's free
+tier rate limits - both fine for a portfolio project's normal usage.
+
+Set GEMINI_API_KEY as an environment variable before running:
+    export GEMINI_API_KEY=your_key_here
+Get a free key at: https://aistudio.google.com/apikey
 """
 
-from sentence_transformers import SentenceTransformer
+import os
+from google import genai
 from typing import List
 import numpy as np
 
-_model = None
+_client = None
+
+EMBEDDING_MODEL = "gemini-embedding-001"
 
 
-def _get_model() -> SentenceTransformer:
-    """
-    Lazily loads the model once and reuses it across calls, since
-    loading it is the slow part (a few seconds), not the encoding itself.
-    """
-    global _model
-    if _model is None:
-        _model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
-    return _model
+def _get_client():
+    global _client
+    if _client is None:
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "GEMINI_API_KEY environment variable not set. "
+                "Get a free key at https://aistudio.google.com/apikey "
+                "and set it before running: export GEMINI_API_KEY=your_key_here"
+            )
+        _client = genai.Client(api_key=api_key)
+    return _client
 
 
 def embed(texts: List[str]) -> np.ndarray:
     """
     Converts a list of text strings (e.g. code chunks) into embedding
-    vectors. Returns a numpy array of shape (len(texts), 384).
+    vectors using Gemini's embedding API.
+
+    Note: gemini-embedding-001 processes one text per request, so we
+    loop rather than send a single batched call. For a small portfolio
+    project (tens to low hundreds of chunks) this is fast enough; a
+    much larger repo would want to parallelize or batch these calls.
     """
-    model = _get_model()
-    return model.encode(texts, show_progress_bar=False, convert_to_numpy=True)
+    client = _get_client()
+    vectors = []
+    for text in texts:
+        result = client.models.embed_content(model=EMBEDDING_MODEL, contents=text)
+        vectors.append(result.embeddings[0].values)
+    return np.array(vectors)
 
 
 if __name__ == "__main__":
