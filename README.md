@@ -82,13 +82,24 @@ pip install -r requirements.txt
 TF-IDF stand-in for embeddings and template-based explanations - good for
 verifying the pipeline works, not for real use.
 
-**Free, real quality (recommended):** get a free Gemini API key at
+**Free, real quality with Gemini:** get a free Gemini API key at
 https://aistudio.google.com/apikey. This single key powers both the
 embeddings and the explanations - no PyTorch or local model download needed:
 ```bash
 export EMBEDDING_MODE=real
 export EXPLAIN_MODE=real
 export GEMINI_API_KEY=your_key_here
+```
+
+**Free, real quality with Groq (alternative explanation provider):** if
+Gemini's free tier is rate-limited or giving quota errors, swap the
+explanation layer to Groq - no credit card required, generous free tier,
+fast responses (Gemini still handles embeddings):
+```bash
+export EMBEDDING_MODE=real
+export EXPLAIN_MODE=groq
+export GEMINI_API_KEY=your_key_here   # still needed for embeddings
+export GROQ_API_KEY=your_key_here     # get one free at https://console.groq.com
 ```
 
 ### 3. Run the backend

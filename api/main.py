@@ -145,15 +145,16 @@ def query_codebase(req: QueryRequest):
     try:
         answer = explain_fn(req.question, results)
     except Exception as e:
-        # If the LLM call fails (rate limit, quota, network issue, etc.),
-        # don't crash the whole request - retrieval already succeeded and
-        # is the harder, more valuable part. Degrade gracefully: show the
-        # retrieved sources with a clear note about why the explanation
-        # is missing, rather than a 500 error with no useful information.
+        # If the LLM call fails (rate limit, quota, missing API key, network
+        # issue, etc.), don't crash the whole request - retrieval already
+        # succeeded and is the harder, more valuable part. Degrade gracefully:
+        # show the retrieved sources with a clear reason, rather than a bare
+        # 500 error with no useful information.
+        reason = str(e)[:200]  # capped so a huge stack trace can't leak through
         answer = (
-            f"(Explanation temporarily unavailable: {type(e).__name__}. "
-            f"This is usually a rate limit or quota issue with the LLM provider, "
-            f"not a bug in retrieval - the source files below were still found correctly.)"
+            f"(Explanation temporarily unavailable - {type(e).__name__}: {reason} "
+            f"The source files below were still found correctly; this only "
+            f"affects the natural-language summary.)"
         )
 
     sources = [

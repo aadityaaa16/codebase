@@ -74,7 +74,7 @@ def explain(question: str, chunks: List[Dict]) -> str:
     prompt = _build_prompt(question, chunks)
 
     response = client.models.generate_content(
-        model="gemini-2.0-flash",  # fast + free-tier friendly
+        model="gemini-2.5-flash",  # gemini-2.0-flash was retired June 1, 2026
         contents=prompt,
     )
     return response.text

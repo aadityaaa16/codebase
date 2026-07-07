@@ -2,7 +2,7 @@
 config.py
 
 Single place that decides whether the API uses the REAL embedder/explainer
-(sentence-transformers + Gemini) or the SANDBOX MOCKS (TF-IDF + templates).
+(Gemini or Groq) or the SANDBOX MOCKS (TF-IDF + templates).
 
 Why centralize this: every other file just calls `get_embed_fn()` or
 `get_explain_fn()` and doesn't need to know or care which implementation
@@ -11,12 +11,13 @@ rest of the system" principle from the chunker/embedder design.
 
 How it decides:
 - EMBEDDING_MODE env var: "real" or "mock" (default: "mock")
-- EXPLAIN_MODE env var: "real" or "mock" (default: "mock")
+- EXPLAIN_MODE env var: "real" (Gemini), "groq", or "mock" (default: "mock")
 
 On your own machine, before running the app:
     export EMBEDDING_MODE=real
-    export EXPLAIN_MODE=real
+    export EXPLAIN_MODE=real       # or "groq" to use Groq instead of Gemini
     export GEMINI_API_KEY=your_key_here
+    export GROQ_API_KEY=your_key_here   # only needed if EXPLAIN_MODE=groq
 """
 
 import os
@@ -55,6 +56,9 @@ def get_explain_fn():
     """Returns the explain(question, chunks) -> str function to use."""
     if EXPLAIN_MODE == "real":
         from explainer import explain
+        return explain
+    elif EXPLAIN_MODE == "groq":
+        from explainer_groq import explain
         return explain
     else:
         from explainer_mock import explain
