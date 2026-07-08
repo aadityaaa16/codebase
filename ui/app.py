@@ -18,7 +18,22 @@ import streamlit as st
 import requests
 
 import os as _os
-API_BASE = "http://localhost:8000"
+
+def _get_api_base():
+    """
+    Resolves the FastAPI backend URL in this priority order:
+    1. Streamlit secrets (st.secrets["API_BASE"]) - used on Streamlit
+       Community Cloud, set via the deploy dialog's "Secrets" field.
+    2. API_BASE environment variable - useful for other hosting setups.
+    3. localhost:8000 - the default for local development.
+    """
+    try:
+        return st.secrets["API_BASE"]
+    except Exception:
+        pass
+    return _os.environ.get("API_BASE", "http://localhost:8000")
+
+API_BASE = _get_api_base()
 _DEFAULT_SAMPLE_REPO = _os.path.abspath(
     _os.path.join(_os.path.dirname(__file__), "..", "sample_repo")
 )
@@ -268,6 +283,8 @@ if "indexed" not in st.session_state:
     st.session_state.indexed = False
 if "chunk_count" not in st.session_state:
     st.session_state.chunk_count = 0
+if "last_repo_path" not in st.session_state:
+    st.session_state.last_repo_path = None
 
 
 # ---------------------------------------------------------------------------
@@ -275,24 +292,54 @@ if "chunk_count" not in st.session_state:
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("### Repository")
-    repo_path = st.text_input(
-        "Path to index",
-        value=_DEFAULT_SAMPLE_REPO,
+
+    index_mode = st.radio(
+        "Index source",
+        ["GitHub URL", "Local path"],
         label_visibility="collapsed",
+        horizontal=True,
     )
-    if st.button("Index Repository", use_container_width=True):
-        with st.spinner("Chunking and embedding..."):
-            try:
-                resp = requests.post(f"{API_BASE}/index", json={"repo_path": repo_path}, timeout=120)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    st.session_state.indexed = True
-                    st.session_state.chunk_count = data["chunks_indexed"]
-                    st.success(f"Indexed {data['chunks_indexed']} chunks")
-                else:
-                    st.error(resp.json().get("detail", "Indexing failed"))
-            except requests.exceptions.ConnectionError:
-                st.error("Can't reach API. Is it running on localhost:8000?")
+
+    if index_mode == "GitHub URL":
+        github_url = st.text_input(
+            "GitHub URL",
+            placeholder="https://github.com/username/repository",
+            label_visibility="collapsed",
+        )
+        if st.button("Index Repository", use_container_width=True):
+            with st.spinner("Cloning and indexing..."):
+                try:
+                    resp = requests.post(f"{API_BASE}/index_github", json={"github_url": github_url}, timeout=180)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        st.session_state.indexed = True
+                        st.session_state.chunk_count = data["chunks_indexed"]
+                        st.session_state.last_repo_path = data["repo_path"]
+                        st.success(f"Indexed {data['chunks_indexed']} chunks")
+                    else:
+                        st.error(resp.json().get("detail", "Indexing failed"))
+                except requests.exceptions.ConnectionError:
+                    st.error(f"Can't reach API at {API_BASE}")
+    else:
+        repo_path = st.text_input(
+            "Path to index",
+            value=_DEFAULT_SAMPLE_REPO,
+            label_visibility="collapsed",
+        )
+        if st.button("Index Repository", use_container_width=True):
+            with st.spinner("Chunking and embedding..."):
+                try:
+                    resp = requests.post(f"{API_BASE}/index", json={"repo_path": repo_path}, timeout=120)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        st.session_state.indexed = True
+                        st.session_state.chunk_count = data["chunks_indexed"]
+                        st.session_state.last_repo_path = data["repo_path"]
+                        st.success(f"Indexed {data['chunks_indexed']} chunks")
+                    else:
+                        st.error(resp.json().get("detail", "Indexing failed"))
+                except requests.exceptions.ConnectionError:
+                    st.error(f"Can't reach API at {API_BASE}")
 
     st.markdown("---")
     st.markdown("### System status")
@@ -377,7 +424,10 @@ for item in st.session_state.history:
             # Show path relative to the indexed repo root, not the full absolute path,
             # by trimming everything up through the last folder that matches the
             # indexed repo's own folder name (works for any repo, not just sample_repo)
-            repo_root_name = _os.path.basename(_os.path.normpath(repo_path)) if 'repo_path' in dir() else None
+            repo_root_name = (
+                _os.path.basename(_os.path.normpath(st.session_state.last_repo_path))
+                if st.session_state.last_repo_path else None
+            )
             if repo_root_name and repo_root_name in folder:
                 folder = folder.split(repo_root_name, 1)[-1].lstrip("/")
             relevance_pct = min(100, max(5, int(src["hybrid_score"] * 100)))

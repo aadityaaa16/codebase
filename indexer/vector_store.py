@@ -75,7 +75,7 @@ def store_chunks(chunks: List[CodeChunk], embed_fn):
     """
     Embeds and stores a list of CodeChunks.
     `embed_fn` is injected (rather than imported directly) so this file
-    doesn't care whether it's the real sentence-transformers embedder
+    doesn't care whether it's the real Gemini embedder
     or the sandbox mock - same pattern as the rest of the project.
     """
     collection = _get_collection()

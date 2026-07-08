@@ -18,6 +18,7 @@ big reason FastAPI is a strong choice over Flask for this kind of project).
 import os
 import sys
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 
@@ -28,9 +29,23 @@ from run_indexer import index_repo
 import vector_store
 from bm25_search import BM25Index
 from hybrid_search import hybrid_search
+from github_cloner import clone_repo
 import config
 
 app = FastAPI(title="AI Codebase Navigator")
+
+# CORS: needed because the deployed Streamlit UI lives on a different
+# domain (e.g. *.streamlit.app) than this API (e.g. *.railway.app).
+# Without this, the browser blocks the UI's requests to the API entirely.
+# Allowing all origins is acceptable here since this API has no auth/
+# user accounts and no sensitive data beyond the indexed code itself -
+# a real multi-tenant product would restrict this to known origins.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # In-memory state. Fine for a single-user portfolio project - a real
 # production version would persist this per-project rather than in
@@ -44,6 +59,10 @@ _state = {
 
 class IndexRequest(BaseModel):
     repo_path: str
+
+
+class IndexGithubRequest(BaseModel):
+    github_url: str
 
 
 class IndexResponse(BaseModel):
@@ -83,17 +102,13 @@ def health_check():
     }
 
 
-@app.post("/index", response_model=IndexResponse)
-def index_repository(req: IndexRequest):
+def _index_path(repo_path: str) -> IndexResponse:
     """
-    Chunks every Python file in the given repo path, embeds each chunk,
-    and stores them in ChromaDB + builds the BM25 index. Must be called
-    once before /query will return anything useful.
+    Shared indexing logic used by both /index (local path) and
+    /index_github (cloned from a URL) - chunk, embed, store, and build
+    the BM25 index, regardless of where the repo files came from.
     """
-    if not os.path.isdir(req.repo_path):
-        raise HTTPException(status_code=400, detail=f"Path not found: {req.repo_path}")
-
-    chunks = index_repo(req.repo_path)
+    chunks = index_repo(repo_path)
     if not chunks:
         raise HTTPException(status_code=400, detail="No Python files with functions/classes found in this path.")
 
@@ -119,10 +134,38 @@ def index_repository(req: IndexRequest):
     bm25_index = BM25Index()
     bm25_index.build(ids, texts, metadatas)
     _state["bm25_index"] = bm25_index
-    _state["indexed_repo"] = req.repo_path
+    _state["indexed_repo"] = repo_path
     _state["chunk_count"] = len(chunks)
 
-    return IndexResponse(repo_path=req.repo_path, chunks_indexed=len(chunks))
+    return IndexResponse(repo_path=repo_path, chunks_indexed=len(chunks))
+
+
+@app.post("/index", response_model=IndexResponse)
+def index_repository(req: IndexRequest):
+    """
+    Chunks every Python file in the given LOCAL repo path, embeds each
+    chunk, and stores them. Use this when running locally against a
+    repo already on your own disk.
+    """
+    if not os.path.isdir(req.repo_path):
+        raise HTTPException(status_code=400, detail=f"Path not found: {req.repo_path}")
+    return _index_path(req.repo_path)
+
+
+@app.post("/index_github", response_model=IndexResponse)
+def index_github_repository(req: IndexGithubRequest):
+    """
+    Clones a PUBLIC GitHub repo server-side, then indexes it exactly
+    like /index. This is what lets a publicly deployed demo accept any
+    GitHub URL, since it has no access to a visitor's local filesystem.
+    """
+    try:
+        cloned_path = clone_repo(req.github_url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return _index_path(cloned_path)
 
 
 @app.post("/query", response_model=QueryResponse)

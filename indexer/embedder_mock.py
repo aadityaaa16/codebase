@@ -2,18 +2,19 @@
 embedder_mock.py
 
 SANDBOX-ONLY stand-in for embedder.py. This exists purely because this
-particular development sandbox cannot reach huggingface.co to download
-the real sentence-transformers model.
+particular development sandbox cannot reach the Gemini API to generate
+real embeddings.
 
 It exposes the SAME `embed(texts) -> vectors` interface as embedder.py,
 so every other module (indexing, retrieval) works identically regardless
 of which one is plugged in. This lets us test the full pipeline here
-and then swap in the real embedder with a one-line import change when
-you run this on your own machine.
+and then swap in the real embedder with a one-line config change when
+you run this on your own machine (EMBEDDING_MODE=real).
 
 IMPORTANT: TF-IDF vectors are NOT true semantic embeddings. They match
 based on shared words/tokens, not meaning. Do not use this for your
-actual project - swap to embedder.py before demoing or submitting.
+actual project - use embedder.py (EMBEDDING_MODE=real) before demoing
+or submitting.
 """
 
 from sklearn.feature_extraction.text import TfidfVectorizer
