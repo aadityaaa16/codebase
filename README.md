@@ -12,6 +12,11 @@ opening files, and asking senior developers questions that are often answered
 by code that already exists — you just can't find it. This tool answers those
 questions directly, with every answer traceable back to real source code.
 
+## 🚀 Live Demo
+
+**Try it here:**  
+https://codebase-wnyfwdnwepkzzmadi6khp4.streamlit.app/
+
 ## Architecture
 
 ```
