@@ -1,18 +1,4 @@
-"""
-app.py
 
-Streamlit UI for the AI Codebase Navigator.
-
-Design concept: instead of a generic chatbot skin, the source results
-are styled like a "Find in Files" panel from a code editor - file
-breadcrumbs, gutter-style line numbers, monospace snippets. This is
-the one visual idea worth spending polish on, since it's the moment
-that actually differentiates this from a bolted-on chat widget.
-
-Run with:
-    streamlit run app.py
-(requires the FastAPI backend running at localhost:8000 - see api/main.py)
-"""
 
 import streamlit as st
 import requests
@@ -318,7 +304,9 @@ with st.sidebar:
                         st.success(f"Indexed {data['chunks_indexed']} chunks")
                     else:
                         st.error(resp.json().get("detail", "Indexing failed"))
-                except requests.exceptions.ConnectionError:
+                except requests.exceptions.Timeout:
+                    st.error("Request timed out - if the backend was asleep (free-tier cold start), try again.")
+                except requests.exceptions.RequestException:
                     st.error(f"Can't reach API at {API_BASE}")
     else:
         repo_path = st.text_input(
@@ -338,13 +326,18 @@ with st.sidebar:
                         st.success(f"Indexed {data['chunks_indexed']} chunks")
                     else:
                         st.error(resp.json().get("detail", "Indexing failed"))
-                except requests.exceptions.ConnectionError:
+                except requests.exceptions.Timeout:
+                    st.error("Request timed out - if the backend was asleep (free-tier cold start), try again.")
+                except requests.exceptions.RequestException:
                     st.error(f"Can't reach API at {API_BASE}")
 
     st.markdown("---")
     st.markdown("### System status")
     try:
-        health = requests.get(f"{API_BASE}/", timeout=5).json()
+        # Cold-start-aware timeout: Render's free tier sleeps after 15 min
+        # idle and can take 30-60s to wake up. 20s gives it a real chance
+        # without letting a fully-asleep backend freeze the page for a minute.
+        health = requests.get(f"{API_BASE}/", timeout=20).json()
         emb_mode = health.get("embedding_mode", "unknown")
         exp_mode = health.get("explain_mode", "unknown")
         st.markdown(f"""
@@ -357,7 +350,9 @@ with st.sidebar:
         """, unsafe_allow_html=True)
         if health.get("chunk_count"):
             st.caption(f"{health['chunk_count']} chunks indexed from {health.get('indexed_repo', '')}")
-    except requests.exceptions.ConnectionError:
+    except requests.exceptions.Timeout:
+        st.info("Backend is waking up (free-tier cold start) - try refreshing in ~30s.")
+    except requests.exceptions.RequestException:
         st.warning("API not reachable")
 
     st.markdown("---")
@@ -398,8 +393,10 @@ if ask_clicked and question.strip():
                 st.session_state.history.insert(0, resp.json())
             else:
                 st.error(resp.json().get("detail", "Query failed"))
-        except requests.exceptions.ConnectionError:
-            st.error("Can't reach API. Is it running on localhost:8000?")
+        except requests.exceptions.Timeout:
+            st.error("Request timed out - if the backend was asleep (free-tier cold start), try again in ~30s.")
+        except requests.exceptions.RequestException:
+            st.error(f"Can't reach API at {API_BASE}")
 
 if not st.session_state.history:
     st.markdown("""
